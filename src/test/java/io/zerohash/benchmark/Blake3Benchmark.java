@@ -170,23 +170,39 @@ public class Blake3Benchmark {
     // ========================================================================
 
     @Benchmark
-    public byte[] blake3_hashFile() throws IOException {
-        return Blake3.hashFile(tempFile);
+    public byte[] blake3_hashFile() {
+        try {
+            return Blake3.hashFile(tempFile);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Benchmark
-    public byte[] blake3_hashFileParallel() throws IOException {
-        return Blake3.hashFileParallel(tempFile);
+    public byte[] blake3_hashFileParallel() {
+        try {
+            return Blake3.hashFileParallel(tempFile);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Benchmark
-    public byte[] blake3_hashFileMmap() throws IOException {
-        return Blake3.hashFileMmap(tempFile);
+    public byte[] blake3_hashFileMmap() {
+        try {
+            return Blake3.hashFileMmap(tempFile);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Benchmark
-    public byte[] blake3_hashFileMmapParallel() throws IOException {
-        return Blake3.hashFileMmapParallel(tempFile);
+    public byte[] blake3_hashFileMmapParallel() {
+        try {
+            return Blake3.hashFileMmapParallel(tempFile);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ========================================================================
@@ -194,8 +210,12 @@ public class Blake3Benchmark {
     // ========================================================================
 
     @Benchmark
-    public byte[] blake3_hashDirectory() throws IOException {
-        return Blake3.hashDirectory(tempDir);
+    public byte[] blake3_hashDirectory() {
+        try {
+            return Blake3.hashDirectory(tempDir);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ========================================================================
