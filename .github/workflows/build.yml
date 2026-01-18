@@ -51,14 +51,13 @@ jobs:
       env:
         LD_LIBRARY_PATH: ${{ github.workspace }}/rust-ffi/target/release
     
-    - name: Compile test classes for JMH
-      run: mvn test-compile -B
+    - name: Build JMH Benchmarks JAR
+      run: mvn package -Pjmh -DskipTests -B
     
     - name: Run JMH Benchmarks
       run: |
         java --enable-preview --enable-native-access=ALL-UNNAMED \
           -Djava.library.path=rust-ffi/target/release \
-          -cp "target/test-classes:target/classes:$HOME/.m2/repository/org/openjdk/jmh/jmh-core/1.37/jmh-core-1.37.jar:$HOME/.m2/repository/org/openjdk/jmh/jmh-generator-annprocess/1.37/jmh-generator-annprocess-1.37.jar:$HOME/.m2/repository/net/sf/jopt-simple/jopt-simple/5.0.4/jopt-simple-5.0.4.jar:$HOME/.m2/repository/org/apache/commons/commons-math3/3.6.1/commons-math3-3.6.1.jar" \
-          org.openjdk.jmh.Main ".*Blake3.*" -f 1 -wi 2 -i 3 -t 1
+          -jar target/benchmarks.jar -f 1 -wi 2 -i 3 -t 1
       env:
         LD_LIBRARY_PATH: ${{ github.workspace }}/rust-ffi/target/release
