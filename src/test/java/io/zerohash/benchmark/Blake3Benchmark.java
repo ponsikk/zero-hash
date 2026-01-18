@@ -1,0 +1,120 @@
+package io.zerohash.benchmark;
+
+import io.zerohash.Blake3;
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.RunnerException;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.util.Random;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * JMH Benchmarks for Zero-Hash BLAKE3 implementation.
+ * 
+ * <p>
+ * Run with:
+ * 
+ * <pre>
+ * mvn clean test-compile exec:java -Dexec.mainClass=io.zerohash.benchmark.Blake3Benchmark
+ * </pre>
+ */
+@BenchmarkMode(Mode.Throughput)
+@OutputTimeUnit(TimeUnit.SECONDS)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
+@Fork(value = 1, jvmArgs = { "--enable-preview", "--enable-native-access=ALL-UNNAMED" })
+@State(Scope.Benchmark)
+public class Blake3Benchmark {
+
+    @Param({ "1024", "65536", "1048576", "10485760", "104857600" }) // 1KB, 64KB, 1MB, 10MB, 100MB
+    private int dataSize;
+
+    private byte[] data;
+    private ByteBuffer directBuffer;
+    private MessageDigest sha256;
+    private byte[] expectedHash;
+
+    @Setup(Level.Trial)
+    public void setup() throws Exception {
+        data = new byte[dataSize];
+        new Random(42).nextBytes(data); // Fixed seed for reproducibility
+
+        directBuffer = ByteBuffer.allocateDirect(dataSize);
+        directBuffer.put(data);
+        directBuffer.flip();
+
+        sha256 = MessageDigest.getInstance("SHA-256");
+        expectedHash = Blake3.hash(data);
+    }
+
+    // ========================================================================
+    // BLAKE3 benchmarks
+    // ========================================================================
+
+    @Benchmark
+    public byte[] blake3_singleThreaded() {
+        return Blake3.hash(data);
+    }
+
+    @Benchmark
+    public byte[] blake3_parallel() {
+        return Blake3.hashParallel(data);
+    }
+
+    @Benchmark
+    public byte[] blake3_zeroCopy() {
+        directBuffer.position(0);
+        return Blake3.hashZeroCopy(directBuffer);
+    }
+
+    @Benchmark
+    public byte[] blake3_streaming() {
+        try (var hasher = Blake3.hasher()) {
+            // Process in 64KB chunks
+            int chunkSize = 64 * 1024;
+            for (int offset = 0; offset < data.length; offset += chunkSize) {
+                int len = Math.min(chunkSize, data.length - offset);
+                byte[] chunk = new byte[len];
+                System.arraycopy(data, offset, chunk, 0, len);
+                hasher.update(chunk);
+            }
+            return hasher.digest();
+        }
+    }
+
+    // ========================================================================
+    // SHA-256 baseline
+    // ========================================================================
+
+    @Benchmark
+    public byte[] sha256_baseline() {
+        sha256.reset();
+        return sha256.digest(data);
+    }
+
+    // ========================================================================
+    // Verification benchmark
+    // ========================================================================
+
+    @Benchmark
+    public boolean blake3_verify() {
+        return Blake3.verify(data, expectedHash);
+    }
+
+    // ========================================================================
+    // Main runner
+    // ========================================================================
+
+    public static void main(String[] args) throws RunnerException {
+        Options opt = new OptionsBuilder()
+                .include(Blake3Benchmark.class.getSimpleName())
+                .forks(1)
+                .build();
+
+        new Runner(opt).run();
+    }
+}

@@ -188,6 +188,166 @@ public final class Blake3 {
     }
 
     // ========================================================================
+    // File hashing
+    // ========================================================================
+
+    /**
+     * Compute BLAKE3 hash of a file.
+     * 
+     * <p>
+     * Uses streaming API to handle large files without loading into memory.
+     * 
+     * @param path path to file
+     * @return 32-byte hash
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static byte[] hashFile(java.nio.file.Path path) throws java.io.IOException {
+        try (var hasher = hasher();
+                var channel = java.nio.channels.FileChannel.open(path, java.nio.file.StandardOpenOption.READ)) {
+
+            ByteBuffer buffer = ByteBuffer.allocateDirect(64 * 1024); // 64KB chunks
+            while (channel.read(buffer) != -1) {
+                buffer.flip();
+                hasher.updateDirect(buffer);
+                buffer.clear();
+            }
+            return hasher.digest();
+        }
+    }
+
+    /**
+     * Compute BLAKE3 hash of a file and return as hex string.
+     * 
+     * @param path path to file
+     * @return 64-character hex string
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static String hashFileHex(java.nio.file.Path path) throws java.io.IOException {
+        return HEX.formatHex(hashFile(path));
+    }
+
+    /**
+     * Compute parallel BLAKE3 hash of a file (loads entire file into memory).
+     * 
+     * <p>
+     * For files that fit in memory, this is faster than streaming.
+     * Use {@link #hashFile(java.nio.file.Path)} for very large files.
+     * 
+     * @param path path to file
+     * @return 32-byte hash
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static byte[] hashFileParallel(java.nio.file.Path path) throws java.io.IOException {
+        byte[] data = java.nio.file.Files.readAllBytes(path);
+        return hashParallel(data);
+    }
+
+    // ========================================================================
+    // Verification utilities
+    // ========================================================================
+
+    /**
+     * Verify that data matches expected hash.
+     * 
+     * @param data         data to verify
+     * @param expectedHash expected 32-byte hash
+     * @return true if hash matches
+     */
+    public static boolean verify(byte[] data, byte[] expectedHash) {
+        if (expectedHash == null || expectedHash.length != HASH_SIZE) {
+            return false;
+        }
+        byte[] actualHash = hash(data);
+        return java.util.Arrays.equals(actualHash, expectedHash);
+    }
+
+    /**
+     * Verify that data matches expected hex hash.
+     * 
+     * @param data        data to verify
+     * @param expectedHex expected 64-character hex hash
+     * @return true if hash matches
+     */
+    public static boolean verify(byte[] data, String expectedHex) {
+        if (expectedHex == null || expectedHex.length() != 64) {
+            return false;
+        }
+        try {
+            byte[] expectedHash = fromHex(expectedHex);
+            return verify(data, expectedHash);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Verify file hash.
+     * 
+     * @param path         path to file
+     * @param expectedHash expected 32-byte hash
+     * @return true if hash matches
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static boolean verifyFile(java.nio.file.Path path, byte[] expectedHash) throws java.io.IOException {
+        if (expectedHash == null || expectedHash.length != HASH_SIZE) {
+            return false;
+        }
+        byte[] actualHash = hashFile(path);
+        return java.util.Arrays.equals(actualHash, expectedHash);
+    }
+
+    /**
+     * Verify file hash against hex string.
+     * 
+     * @param path        path to file
+     * @param expectedHex expected 64-character hex hash
+     * @return true if hash matches
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static boolean verifyFile(java.nio.file.Path path, String expectedHex) throws java.io.IOException {
+        if (expectedHex == null || expectedHex.length() != 64) {
+            return false;
+        }
+        try {
+            byte[] expectedHash = fromHex(expectedHex);
+            return verifyFile(path, expectedHash);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    // ========================================================================
+    // Hex utilities
+    // ========================================================================
+
+    /**
+     * Parse hex string to bytes.
+     * 
+     * @param hex hex string (case insensitive)
+     * @return byte array
+     * @throws IllegalArgumentException if hex is invalid
+     */
+    public static byte[] fromHex(String hex) {
+        if (hex == null) {
+            throw new IllegalArgumentException("hex cannot be null");
+        }
+        return HEX.parseHex(hex);
+    }
+
+    /**
+     * Convert bytes to hex string.
+     * 
+     * @param bytes byte array
+     * @return lowercase hex string
+     */
+    public static String toHex(byte[] bytes) {
+        if (bytes == null) {
+            throw new IllegalArgumentException("bytes cannot be null");
+        }
+        return HEX.formatHex(bytes);
+    }
+
+    // ========================================================================
     // Zero-copy hashing
     // ========================================================================
 
@@ -430,6 +590,44 @@ public final class Blake3 {
          */
         public Hasher update(String data) {
             return update(data.getBytes(StandardCharsets.UTF_8));
+        }
+
+        /**
+         * Update the hasher with data from DirectByteBuffer (zero-copy).
+         * 
+         * @param buffer direct byte buffer
+         * @return this hasher for chaining
+         * @throws IllegalArgumentException if buffer is not direct
+         */
+        public Hasher updateDirect(ByteBuffer buffer) {
+            if (handle == null) {
+                throw new IllegalStateException("Hasher is closed");
+            }
+            if (done) {
+                throw new IllegalStateException("Hasher is already finalized");
+            }
+            if (!buffer.isDirect()) {
+                throw new IllegalArgumentException("Buffer must be direct");
+            }
+            if (!buffer.hasRemaining()) {
+                return this;
+            }
+
+            try {
+                MemorySegment input = MemorySegment.ofBuffer(buffer);
+                int result = (int) NativeLib.BLAKE3_HASHER_UPDATE.invokeExact(
+                        handle,
+                        input,
+                        (long) buffer.remaining());
+
+                if (result != 0) {
+                    throw new RuntimeException("blake3_hasher_update failed: " + result);
+                }
+            } catch (Throwable t) {
+                throw new RuntimeException("blake3_hasher_update invocation failed", t);
+            }
+
+            return this;
         }
 
         /**
