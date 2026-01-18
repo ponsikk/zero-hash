@@ -7,7 +7,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
 /**
- * Simple benchmark comparing BLAKE3 vs SHA-256.
+ * Benchmark comparing BLAKE3 (single-threaded), BLAKE3 (parallel/Rayon), and
+ * SHA-256.
  * 
  * Run: java --enable-preview --enable-native-access=ALL-UNNAMED -cp
  * target/classes io.zerohash.benchmark.SimpleBenchmark
@@ -17,7 +18,6 @@ public class SimpleBenchmark {
     private static final int WARMUP_ITERATIONS = 3;
     private static final int BENCHMARK_ITERATIONS = 5;
     private static final int[] DATA_SIZES = {
-            1024, // 1 KB
             64 * 1024, // 64 KB
             1024 * 1024, // 1 MB
             10 * 1024 * 1024, // 10 MB
@@ -27,38 +27,51 @@ public class SimpleBenchmark {
     };
 
     public static void main(String[] args) throws Exception {
-        System.out.println("╔══════════════════════════════════════════════════════════════╗");
-        System.out.println("║           Zero-Hash Benchmark: BLAKE3 vs SHA-256             ║");
-        System.out.println("╚══════════════════════════════════════════════════════════════╝");
+        System.out.println("╔═══════════════════════════════════════════════════════════════════════════╗");
+        System.out.println("║      Zero-Hash Benchmark: BLAKE3 vs BLAKE3-Parallel vs SHA-256           ║");
+        System.out.println("╚═══════════════════════════════════════════════════════════════════════════╝");
         System.out.println();
+        System.out.printf("Available processors: %d%n%n", Runtime.getRuntime().availableProcessors());
 
         for (int size : DATA_SIZES) {
             byte[] data = generateData(size);
             System.out.printf("📊 Data size: %s%n", formatSize(size));
-            System.out.println("─".repeat(50));
+            System.out.println("─".repeat(60));
 
             // Warmup
             System.out.print("   Warming up...");
             for (int i = 0; i < WARMUP_ITERATIONS; i++) {
                 Blake3.hash(data);
+                Blake3.hashParallel(data);
                 sha256(data);
             }
             System.out.println(" done");
 
-            // Benchmark BLAKE3
+            // Benchmark BLAKE3 single-threaded
             long blake3Time = benchmarkBlake3(data);
-            double blake3Speed = (double) size / blake3Time * 1000; // bytes per second
+            double blake3Speed = (double) size / blake3Time * 1_000_000_000; // bytes per second
+
+            // Benchmark BLAKE3 parallel (Rayon)
+            long blake3ParallelTime = benchmarkBlake3Parallel(data);
+            double blake3ParallelSpeed = (double) size / blake3ParallelTime * 1_000_000_000;
 
             // Benchmark SHA-256
             long sha256Time = benchmarkSha256(data);
-            double sha256Speed = (double) size / sha256Time * 1000;
+            double sha256Speed = (double) size / sha256Time * 1_000_000_000;
 
             // Results
-            System.out.printf("   BLAKE3:  %8.2f ms  (%s/s)%n",
+            System.out.printf("   BLAKE3:          %8.2f ms  (%s/s)%n",
                     blake3Time / 1_000_000.0, formatSize((long) blake3Speed));
-            System.out.printf("   SHA-256: %8.2f ms  (%s/s)%n",
+            System.out.printf("   BLAKE3-Parallel: %8.2f ms  (%s/s)%n",
+                    blake3ParallelTime / 1_000_000.0, formatSize((long) blake3ParallelSpeed));
+            System.out.printf("   SHA-256:         %8.2f ms  (%s/s)%n",
                     sha256Time / 1_000_000.0, formatSize((long) sha256Speed));
-            System.out.printf("   Speedup: %.1fx faster%n", (double) sha256Time / blake3Time);
+            System.out.println();
+            System.out.printf("   vs SHA-256:      BLAKE3 %.1fx faster, BLAKE3-Parallel %.1fx faster%n",
+                    (double) sha256Time / blake3Time,
+                    (double) sha256Time / blake3ParallelTime);
+            System.out.printf("   Parallel speedup: %.1fx%n",
+                    (double) blake3Time / blake3ParallelTime);
             System.out.println();
         }
 
@@ -70,6 +83,16 @@ public class SimpleBenchmark {
         for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
             long start = System.nanoTime();
             Blake3.hash(data);
+            totalTime += System.nanoTime() - start;
+        }
+        return totalTime / BENCHMARK_ITERATIONS;
+    }
+
+    private static long benchmarkBlake3Parallel(byte[] data) {
+        long totalTime = 0;
+        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
+            long start = System.nanoTime();
+            Blake3.hashParallel(data);
             totalTime += System.nanoTime() - start;
         }
         return totalTime / BENCHMARK_ITERATIONS;
@@ -93,7 +116,7 @@ public class SimpleBenchmark {
 
     private static byte[] generateData(int size) {
         byte[] data = new byte[size];
-        new Random(42).nextBytes(data); // Fixed seed for reproducibility
+        new Random(42).nextBytes(data);
         return data;
     }
 

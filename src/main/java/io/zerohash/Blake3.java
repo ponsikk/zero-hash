@@ -131,6 +131,63 @@ public final class Blake3 {
     }
 
     // ========================================================================
+    // Parallel hashing (Rayon multithreaded)
+    // ========================================================================
+
+    /**
+     * Compute BLAKE3 hash using parallel Rayon threads.
+     * 
+     * <p>
+     * This is optimized for large data (>128KB). For smaller data,
+     * use {@link #hash(byte[])} instead as the threading overhead may hurt
+     * performance.
+     * 
+     * @param data input data to hash
+     * @return 32-byte hash
+     * @throws NullPointerException if data is null
+     */
+    public static byte[] hashParallel(byte[] data) {
+        if (data == null) {
+            throw new NullPointerException("data cannot be null");
+        }
+
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment input;
+            if (data.length > 0) {
+                input = arena.allocate(data.length);
+                input.copyFrom(MemorySegment.ofArray(data));
+            } else {
+                input = MemorySegment.NULL;
+            }
+
+            MemorySegment output = arena.allocate(HASH_SIZE);
+
+            int result = (int) NativeLib.BLAKE3_HASH_PARALLEL.invokeExact(
+                    input,
+                    (long) data.length,
+                    output);
+
+            if (result != 0) {
+                throw new RuntimeException("blake3_hash_parallel failed with error code: " + result);
+            }
+
+            return output.toArray(java.lang.foreign.ValueLayout.JAVA_BYTE);
+        } catch (Throwable t) {
+            throw new RuntimeException("blake3_hash_parallel invocation failed", t);
+        }
+    }
+
+    /**
+     * Compute parallel BLAKE3 hash and return as hex string.
+     * 
+     * @param data input data to hash
+     * @return 64-character hex string
+     */
+    public static String hashParallelHex(byte[] data) {
+        return HEX.formatHex(hashParallel(data));
+    }
+
+    // ========================================================================
     // Zero-copy hashing
     // ========================================================================
 

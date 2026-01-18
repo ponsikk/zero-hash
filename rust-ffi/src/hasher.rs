@@ -46,6 +46,39 @@ pub unsafe fn hash(data: *const u8, len: usize, out: *mut u8) -> i32 {
     error::SUCCESS
 }
 
+/// Compute BLAKE3 hash using parallel Rayon threads.
+/// 
+/// This is optimized for large data (>128KB). For smaller data,
+/// use `hash()` instead as the threading overhead may hurt performance.
+///
+/// # Safety
+/// - `data` must be valid for `len` bytes
+/// - `out` must be valid for at least 32 bytes
+pub unsafe fn hash_parallel(data: *const u8, len: usize, out: *mut u8) -> i32 {
+    if data.is_null() && len > 0 {
+        return error::NULL_POINTER;
+    }
+    if out.is_null() {
+        return error::NULL_POINTER;
+    }
+
+    let input = if len == 0 {
+        &[]
+    } else {
+        slice::from_raw_parts(data, len)
+    };
+
+    // Use Rayon-based parallel hasher
+    let mut hasher = B3Hasher::new();
+    hasher.update_rayon(input);
+    let hash = hasher.finalize();
+    let hash_bytes = hash.as_bytes();
+
+    std::ptr::copy_nonoverlapping(hash_bytes.as_ptr(), out, HASH_SIZE);
+
+    error::SUCCESS
+}
+
 /// Compute keyed BLAKE3 hash (MAC)
 ///
 /// # Safety
