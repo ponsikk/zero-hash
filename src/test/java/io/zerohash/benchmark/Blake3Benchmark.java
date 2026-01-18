@@ -57,16 +57,35 @@ public class Blake3Benchmark {
         sha256 = MessageDigest.getInstance("SHA-256");
         expectedHash = Blake3.hash(data);
 
-        // Create temporary file for file benchmarks
-        tempFile = Files.createTempFile("blake3-bench-", ".bin");
+        // Create temporary file for file benchmarks in target directory
+        Path targetDir = Path.of("target");
+        if (!Files.exists(targetDir)) {
+            Files.createDirectories(targetDir);
+        }
+
+        tempFile = targetDir.resolve("blake3-bench-" + dataSize + ".bin");
         Files.write(tempFile, data);
 
         // Create temporary directory with multiple files for directory benchmarks
-        tempDir = Files.createTempDirectory("blake3-bench-dir-");
+        tempDir = targetDir.resolve("blake3-bench-dir-" + dataSize);
+        if (Files.exists(tempDir)) {
+            // Clean up existing directory
+            Files.walk(tempDir)
+                .sorted((a, b) -> b.compareTo(a))
+                .forEach(path -> {
+                    try {
+                        Files.delete(path);
+                    } catch (IOException e) {
+                        // Ignore
+                    }
+                });
+        }
+        Files.createDirectories(tempDir);
+
         // Create 10 files in the directory
         for (int i = 0; i < 10; i++) {
             Path file = tempDir.resolve("file-" + i + ".bin");
-            byte[] fileData = new byte[dataSize / 10];
+            byte[] fileData = new byte[Math.max(1, dataSize / 10)];
             new Random(42 + i).nextBytes(fileData);
             Files.write(file, fileData);
         }
