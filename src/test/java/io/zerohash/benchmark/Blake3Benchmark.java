@@ -65,6 +65,7 @@ public class Blake3Benchmark {
 
         tempFile = targetDir.resolve("blake3-bench-" + dataSize + ".bin");
         Files.write(tempFile, data);
+        System.out.println("[BENCHMARK SETUP] Created temp file: " + tempFile + " (" + Files.size(tempFile) + " bytes)");
 
         // Create temporary directory with multiple files for directory benchmarks
         tempDir = targetDir.resolve("blake3-bench-dir-" + dataSize);
@@ -89,6 +90,7 @@ public class Blake3Benchmark {
             new Random(42 + i).nextBytes(fileData);
             Files.write(file, fileData);
         }
+        System.out.println("[BENCHMARK SETUP] Created temp dir: " + tempDir + " with 10 files");
     }
 
     @TearDown(Level.Trial)
