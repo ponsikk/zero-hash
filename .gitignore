@@ -1,0 +1,24 @@
+# Build artifacts
+/target/
+/rust-ffi/target/
+
+# IDE
+/.idea/
+/*.iml
+/.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Native libraries (built locally)
+*.dll
+*.so
+*.dylib
+!/native/
+
+# Maven
+dependency-reduced-pom.xml
+
+# Logs
+*.log

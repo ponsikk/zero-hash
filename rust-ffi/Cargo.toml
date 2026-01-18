@@ -1,0 +1,23 @@
+[package]
+name = "zero-hash-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance BLAKE3 hashing via FFI for JVM"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+blake3 = "1.5"
+ffi-safety-macro = { path = "ffi-safety-macro" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "unwind"  # Required for catch_unwind!
+strip = true
+
+[dev-dependencies]
+hex = "0.4"
