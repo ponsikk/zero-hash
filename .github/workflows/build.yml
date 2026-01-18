@@ -50,3 +50,15 @@ jobs:
           io.zerohash.benchmark.SimpleBenchmark
       env:
         LD_LIBRARY_PATH: ${{ github.workspace }}/rust-ffi/target/release
+    
+    - name: Compile test classes for JMH
+      run: mvn test-compile -B
+    
+    - name: Run JMH Benchmarks
+      run: |
+        java --enable-preview --enable-native-access=ALL-UNNAMED \
+          -Djava.library.path=rust-ffi/target/release \
+          -cp "target/test-classes:target/classes:$(mvn dependency:build-classpath -Dmdep.outputFile=/dev/stdout -q)" \
+          io.zerohash.benchmark.Blake3Benchmark
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/rust-ffi/target/release
