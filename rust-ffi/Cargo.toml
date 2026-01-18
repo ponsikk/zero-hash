@@ -9,7 +9,8 @@ license = "MIT OR Apache-2.0"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-blake3 = "1.5"
+blake3 = { version = "1.5", features = ["rayon"] }
+rayon = "1.10"
 ffi-safety-macro = { path = "ffi-safety-macro" }
 
 [profile.release]

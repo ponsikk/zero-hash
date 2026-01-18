@@ -14,7 +14,7 @@
 
 mod hasher;
 
-use ffi_safety_macro::ffi_safe_with_error;
+use ffi_safety_macro::{ffi_safe, ffi_safe_with_error};
 use hasher::{StreamingHasher, error, HASH_SIZE};
 use std::slice;
 
@@ -36,6 +36,25 @@ use std::slice;
 #[no_mangle]
 pub unsafe extern "C" fn blake3_hash(data: *const u8, len: usize, out: *mut u8) -> i32 {
     hasher::hash(data, len, out)
+}
+
+/// Compute BLAKE3 hash using parallel Rayon threads.
+/// 
+/// This is optimized for large data (>128KB). For smaller data,
+/// use `blake3_hash()` instead as the threading overhead may hurt performance.
+///
+/// # Parameters
+/// - `data`: Pointer to input data (can be null if len is 0)
+/// - `len`: Length of input data in bytes
+/// - `out`: Pointer to output buffer (must be at least 32 bytes)
+///
+/// # Returns
+/// - `0` on success
+/// - `-1` on null pointer error
+#[ffi_safe_with_error(-1)]
+#[no_mangle]
+pub unsafe extern "C" fn blake3_hash_parallel(data: *const u8, len: usize, out: *mut u8) -> i32 {
+    hasher::hash_parallel(data, len, out)
 }
 
 /// Compute keyed BLAKE3 hash (MAC).
@@ -99,7 +118,7 @@ pub type HasherHandle = *mut StreamingHasher;
 /// # Returns
 /// - Non-null pointer to hasher on success
 /// - Null pointer on allocation failure
-#[ffi_safe_with_error(std::ptr::null_mut())]
+#[ffi_safe]
 #[no_mangle]
 pub unsafe extern "C" fn blake3_hasher_new() -> HasherHandle {
     Box::into_raw(Box::new(StreamingHasher::new()))

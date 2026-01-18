@@ -2,8 +2,8 @@
 /target/
 /rust-ffi/target/
 
-# IDE
-/.idea/
+# Plan files
+plan project.md
 /*.iml
 /.vscode/
 

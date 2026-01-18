@@ -216,7 +216,7 @@ class Blake3Test {
         byte[] streamingHash;
         try (var hasher = Blake3.hasher()) {
             hasher.update(data);
-            streamingHash = hasher.finalize();
+            streamingHash = hasher.digest();
         }
 
         assertThat(streamingHash).isEqualTo(oneShotHash);
@@ -228,7 +228,7 @@ class Blake3Test {
         try (var hasher = Blake3.hasher()) {
             hasher.update("hel");
             hasher.update("lo");
-            String hex = hasher.finalizeHex();
+            String hex = hasher.digestHex();
 
             assertThat(hex).isEqualTo(HELLO_HASH);
         }
@@ -241,7 +241,7 @@ class Blake3Test {
             String hex = hasher
                     .update("hel")
                     .update("lo")
-                    .finalizeHex();
+                    .digestHex();
 
             assertThat(hex).isEqualTo(HELLO_HASH);
         }
@@ -252,7 +252,7 @@ class Blake3Test {
     void hasher_xof() {
         try (var hasher = Blake3.hasher()) {
             hasher.update("hello");
-            byte[] output64 = hasher.finalize(64);
+            byte[] output64 = hasher.digest(64);
 
             assertThat(output64).hasSize(64);
         }
@@ -263,7 +263,7 @@ class Blake3Test {
     void hasher_finalizeRejectsUpdates() {
         try (var hasher = Blake3.hasher()) {
             hasher.update("hello");
-            hasher.finalize();
+            hasher.digest();
 
             assertThatIllegalStateException()
                     .isThrownBy(() -> hasher.update("world"))
