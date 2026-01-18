@@ -14,13 +14,16 @@ import java.util.Random;
  */
 public class SimpleBenchmark {
 
-    private static final int WARMUP_ITERATIONS = 5;
-    private static final int BENCHMARK_ITERATIONS = 10;
+    private static final int WARMUP_ITERATIONS = 3;
+    private static final int BENCHMARK_ITERATIONS = 5;
     private static final int[] DATA_SIZES = {
             1024, // 1 KB
+            64 * 1024, // 64 KB
             1024 * 1024, // 1 MB
             10 * 1024 * 1024, // 10 MB
-            100 * 1024 * 1024 // 100 MB
+            100 * 1024 * 1024, // 100 MB
+            512 * 1024 * 1024, // 512 MB
+            1024 * 1024 * 1024// 1 GB
     };
 
     public static void main(String[] args) throws Exception {
