@@ -191,6 +191,44 @@ byte[] bytes = Blake3.fromHex("ea8f163db38682925e...");
 String hex = Blake3.toHex(bytes);
 ```
 
+## Performance Benchmarks
+
+JMH microbenchmarks on GitHub Actions (4 cores):
+
+### vs SHA-256
+
+| Data Size | BLAKE3 ZeroCopy | SHA-256 | Speedup |
+|-----------|-----------------|---------|---------|
+| 1 KB | 805K ops/s | 1.4M ops/s | 0.6x |
+| 64 KB | 64K ops/s | 24K ops/s | **2.7x** |
+| 1 MB | 4.0K ops/s | 1.5K ops/s | **2.7x** |
+| 10 MB | 402 ops/s | 137 ops/s | **2.9x** |
+| 100 MB | 35 ops/s | 14 ops/s | **2.6x** |
+
+### File Hashing Performance (100 MB file)
+
+| Method | Throughput | Use Case |
+|--------|-----------|----------|
+| **hashFileMmap** | 30 ops/s | ✅ **Best** for files >1MB |
+| hashFile (streaming) | 28 ops/s | Good for large files (low memory) |
+| hashFileMmapParallel | 22 ops/s | Slower (overhead of byte[] copy) |
+| hashFileParallel | 12 ops/s | ❌ Avoid (loads entire file) |
+
+### Choosing the Right Method
+
+**For in-memory data:**
+- Small (<64KB): `hash()` - simple and fast
+- Medium (64KB-1MB): `hashZeroCopy()` - best performance
+- Large (>1MB): `hashZeroCopy()` or `hashParallel()` if >10MB
+
+**For files:**
+- Any size: `hashFileMmap()` - consistently fastest
+- Very large: `hashFile()` - streaming, low memory
+- Avoid: `hashFileParallel()` - loads entire file into RAM
+
+**For directories:**
+- Use `hashDirectory()` - 11 ops/s for 100MB across 10 files
+
 ## JMH Benchmarks
 
 Run professional microbenchmarks:
