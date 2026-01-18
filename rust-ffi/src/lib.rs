@@ -14,7 +14,7 @@
 
 mod hasher;
 
-use ffi_safety_macro::ffi_safe_with_error;
+use ffi_safety_macro::{ffi_safe, ffi_safe_with_error};
 use hasher::{StreamingHasher, error, HASH_SIZE};
 use std::slice;
 
@@ -99,7 +99,7 @@ pub type HasherHandle = *mut StreamingHasher;
 /// # Returns
 /// - Non-null pointer to hasher on success
 /// - Null pointer on allocation failure
-#[ffi_safe_with_error(std::ptr::null_mut())]
+#[ffi_safe]
 #[no_mangle]
 pub unsafe extern "C" fn blake3_hasher_new() -> HasherHandle {
     Box::into_raw(Box::new(StreamingHasher::new()))
