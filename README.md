@@ -18,17 +18,62 @@
 
 ## Benchmarks
 
+JMH microbenchmarks on GitHub Actions (4 cores): 
 
+### vs SHA-256: кто быстрее?
 
-| Data Size | BLAKE3 | BLAKE3-Parallel | SHA-256 | vs SHA-256 |
-|-----------|--------|-----------------|---------|------------|
-| 64 KB | 196 MB/s | **405 MB/s** | 23 MB/s | **17x faster** |
-| 10 MB | 2.8 GB/s | **4.9 GB/s** | 1.3 GB/s | **3.7x faster** |
-| 100 MB | 2.1 GB/s | **3.2 GB/s** | 1.3 GB/s | **2.4x faster** |
-| 512 MB | 2.1 GB/s | **3.2 GB/s** | 1.3 GB/s | **2.4x faster** |
-| 1 GB | 2.1 GB/s | **3.2 GB/s** | 1.3 GB/s | **2.4x faster** |
+| Data Size | BLAKE3 Zero-Copy | BLAKE3 Parallel | SHA-256 | Выигрыш |
+|-----------|------------------|-----------------|---------|---------|
+| 64 KB | 102K ops/s | 38K ops/s | 20K ops/s | **5x** |
+| 1 MB | 6.7K ops/s | 4.8K ops/s | 1.1K ops/s | **6x** |
+| 10 MB | 632 ops/s | 385 ops/s | 119 ops/s | **5x** |
+| 100 MB | 56 ops/s | 26 ops/s | 12 ops/s | **4.7x** |
 
-**Parallel speedup**: 1.5-2.1x on 4 cores (scales with more cores)
+### Какой метод выбрать?
+
+- **`hashZeroCopy()`** — самый быстрый. Если данные уже в `DirectByteBuffer`, используй его.
+- **`hashParallel()`** — хорош для файлов >1MB. Использует все ядра через Rayon.
+- **`hash()`** — базовый вариант. Для мелких данных (<64KB) работает отлично.
+- **Streaming** — для огромных файлов, которые не влезают в память.
+
+<details>
+<summary>Полный вывод JMH бенчмарков</summary>
+
+```
+Benchmark                              (dataSize)   Mode  Cnt        Score        Error  Units
+Blake3Benchmark.blake3_parallel              1024  thrpt    3  1023163.146 ±  25696.591  ops/s
+Blake3Benchmark.blake3_parallel             65536  thrpt    3    38019.450 ±   9965.844  ops/s
+Blake3Benchmark.blake3_parallel           1048576  thrpt    3     4768.934 ±    138.943  ops/s
+Blake3Benchmark.blake3_parallel          10485760  thrpt    3      385.021 ±     21.870  ops/s
+Blake3Benchmark.blake3_parallel         104857600  thrpt    3       25.709 ±      3.151  ops/s
+Blake3Benchmark.blake3_singleThreaded        1024  thrpt    3  1065710.801 ±  17087.353  ops/s
+Blake3Benchmark.blake3_singleThreaded       65536  thrpt    3    79430.127 ±   1414.476  ops/s
+Blake3Benchmark.blake3_singleThreaded     1048576  thrpt    3     4297.553 ±     35.835  ops/s
+Blake3Benchmark.blake3_singleThreaded    10485760  thrpt    3      291.466 ±     15.076  ops/s
+Blake3Benchmark.blake3_singleThreaded   104857600  thrpt    3       20.409 ±      2.519  ops/s
+Blake3Benchmark.blake3_streaming             1024  thrpt    3   877258.269 ± 195766.278  ops/s
+Blake3Benchmark.blake3_streaming            65536  thrpt    3    51465.645 ±   9406.399  ops/s
+Blake3Benchmark.blake3_streaming          1048576  thrpt    3     2853.753 ±     87.409  ops/s
+Blake3Benchmark.blake3_streaming         10485760  thrpt    3      257.822 ±      4.442  ops/s
+Blake3Benchmark.blake3_streaming        104857600  thrpt    3       27.139 ±      7.142  ops/s
+Blake3Benchmark.blake3_verify                1024  thrpt    3  1064962.317 ±  13139.846  ops/s
+Blake3Benchmark.blake3_verify               65536  thrpt    3    80055.871 ±   1396.889  ops/s
+Blake3Benchmark.blake3_verify             1048576  thrpt    3     4242.384 ±     38.179  ops/s
+Blake3Benchmark.blake3_verify            10485760  thrpt    3      291.438 ±     19.388  ops/s
+Blake3Benchmark.blake3_verify           104857600  thrpt    3       20.335 ±      5.414  ops/s
+Blake3Benchmark.blake3_zeroCopy              1024  thrpt    3  1094461.599 ±  31262.232  ops/s
+Blake3Benchmark.blake3_zeroCopy             65536  thrpt    3   102922.934 ±   7465.248  ops/s
+Blake3Benchmark.blake3_zeroCopy           1048576  thrpt    3     6745.847 ±     44.663  ops/s
+Blake3Benchmark.blake3_zeroCopy          10485760  thrpt    3      632.321 ±      4.592  ops/s
+Blake3Benchmark.blake3_zeroCopy         104857600  thrpt    3       55.940 ±     18.569  ops/s
+Blake3Benchmark.sha256_baseline              1024  thrpt    3  1162794.195 ±  95197.388  ops/s
+Blake3Benchmark.sha256_baseline             65536  thrpt    3    20184.649 ±    613.383  ops/s
+Blake3Benchmark.sha256_baseline           1048576  thrpt    3     1145.848 ±    528.001  ops/s
+Blake3Benchmark.sha256_baseline          10485760  thrpt    3      119.116 ±      6.330  ops/s
+Blake3Benchmark.sha256_baseline         104857600  thrpt    3       11.824 ±      0.033  ops/s
+```
+
+</details>
 
 ## Quick Start
 
@@ -103,11 +148,28 @@ try (var hasher = Blake3.hasher()) {
 ### File Hashing
 
 ```java
+// Basic file hashing (streaming, low memory)
 byte[] hash = Blake3.hashFile(Path.of("large-file.bin"));
-String hex = Blake3.hashFileHex(path);
 
-// Parallel (loads file into memory, faster for files that fit)
+// Memory-mapped (fastest for files >10MB)
+byte[] hash = Blake3.hashFileMmap(path);
+
+// Memory-mapped + parallel Rayon
+byte[] hash = Blake3.hashFileMmapParallel(path);
+
+// Load into memory + parallel (for files that fit in RAM)
 byte[] hash = Blake3.hashFileParallel(path);
+```
+
+### Directory Hashing
+
+```java
+// Hash entire directory (sorted, deterministic)
+byte[] hash = Blake3.hashDirectory(Path.of("./src"));
+
+// Get hash for each file
+Map<String, String> hashes = Blake3.hashDirectoryFilesHex(directory);
+// {"src/main/App.java": "abc123...", "src/main/Utils.java": "def456..."}
 ```
 
 ### Verification

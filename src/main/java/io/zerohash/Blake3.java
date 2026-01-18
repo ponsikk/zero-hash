@@ -242,6 +242,179 @@ public final class Blake3 {
         return hashParallel(data);
     }
 
+    /**
+     * Compute BLAKE3 hash using memory-mapped file I/O.
+     * 
+     * <p>
+     * This is the fastest method for large files. The file is mapped
+     * directly into memory without copying, then hashed using parallel Rayon.
+     * 
+     * <p>
+     * Best for files >10MB. For smaller files, use
+     * {@link #hashFile(java.nio.file.Path)}.
+     * 
+     * @param path path to file
+     * @return 32-byte hash
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static byte[] hashFileMmap(java.nio.file.Path path) throws java.io.IOException {
+        try (var channel = java.nio.channels.FileChannel.open(path, java.nio.file.StandardOpenOption.READ)) {
+            long size = channel.size();
+            if (size == 0) {
+                return hash(new byte[0]);
+            }
+            if (size > Integer.MAX_VALUE) {
+                // File too large for single mapping, fall back to streaming
+                return hashFile(path);
+            }
+
+            java.nio.MappedByteBuffer mapped = channel.map(
+                    java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, size);
+
+            // Use zero-copy hashing since MappedByteBuffer is direct
+            return hashZeroCopy(mapped);
+        }
+    }
+
+    /**
+     * Compute BLAKE3 hash using memory-mapped file with parallel Rayon.
+     * 
+     * @param path path to file
+     * @return 32-byte hash
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static byte[] hashFileMmapParallel(java.nio.file.Path path) throws java.io.IOException {
+        try (var channel = java.nio.channels.FileChannel.open(path, java.nio.file.StandardOpenOption.READ)) {
+            long size = channel.size();
+            if (size == 0) {
+                return hash(new byte[0]);
+            }
+            if (size > Integer.MAX_VALUE) {
+                return hashFile(path);
+            }
+
+            java.nio.MappedByteBuffer mapped = channel.map(
+                    java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, size);
+
+            // Convert to byte array for parallel hashing
+            byte[] data = new byte[(int) size];
+            mapped.get(data);
+            return hashParallel(data);
+        }
+    }
+
+    /**
+     * Compute BLAKE3 hash of a file and return as hex string (memory-mapped).
+     * 
+     * @param path path to file
+     * @return 64-character hex string
+     * @throws java.io.IOException if file cannot be read
+     */
+    public static String hashFileMmapHex(java.nio.file.Path path) throws java.io.IOException {
+        return HEX.formatHex(hashFileMmap(path));
+    }
+
+    // ========================================================================
+    // Directory hashing
+    // ========================================================================
+
+    /**
+     * Compute combined BLAKE3 hash of all files in a directory.
+     * 
+     * <p>
+     * Files are sorted by path to ensure deterministic results.
+     * The hash includes relative path and content of each file.
+     * 
+     * @param directory path to directory
+     * @return 32-byte hash
+     * @throws java.io.IOException      if directory cannot be read
+     * @throws IllegalArgumentException if path is not a directory
+     */
+    public static byte[] hashDirectory(java.nio.file.Path directory) throws java.io.IOException {
+        if (!java.nio.file.Files.isDirectory(directory)) {
+            throw new IllegalArgumentException("Path is not a directory: " + directory);
+        }
+
+        try (var hasher = hasher()) {
+            java.nio.file.Files.walk(directory)
+                    .filter(java.nio.file.Files::isRegularFile)
+                    .sorted()
+                    .forEach(file -> {
+                        try {
+                            // Include relative path in hash for uniqueness
+                            String relativePath = directory.relativize(file).toString();
+                            hasher.update(relativePath);
+
+                            // Include file content
+                            byte[] content = java.nio.file.Files.readAllBytes(file);
+                            hasher.update(content);
+                        } catch (java.io.IOException e) {
+                            throw new java.io.UncheckedIOException(e);
+                        }
+                    });
+
+            return hasher.digest();
+        } catch (java.io.UncheckedIOException e) {
+            throw e.getCause();
+        }
+    }
+
+    /**
+     * Compute combined BLAKE3 hash of directory and return as hex string.
+     * 
+     * @param directory path to directory
+     * @return 64-character hex string
+     * @throws java.io.IOException if directory cannot be read
+     */
+    public static String hashDirectoryHex(java.nio.file.Path directory) throws java.io.IOException {
+        return HEX.formatHex(hashDirectory(directory));
+    }
+
+    /**
+     * Compute hash of each file in directory and return as map.
+     * 
+     * @param directory path to directory
+     * @return map of relative path to 32-byte hash
+     * @throws java.io.IOException if directory cannot be read
+     */
+    public static java.util.Map<String, byte[]> hashDirectoryFiles(java.nio.file.Path directory)
+            throws java.io.IOException {
+        if (!java.nio.file.Files.isDirectory(directory)) {
+            throw new IllegalArgumentException("Path is not a directory: " + directory);
+        }
+
+        java.util.Map<String, byte[]> result = new java.util.TreeMap<>();
+
+        java.nio.file.Files.walk(directory)
+                .filter(java.nio.file.Files::isRegularFile)
+                .forEach(file -> {
+                    try {
+                        String relativePath = directory.relativize(file).toString();
+                        byte[] hash = hashFile(file);
+                        result.put(relativePath, hash);
+                    } catch (java.io.IOException e) {
+                        throw new java.io.UncheckedIOException(e);
+                    }
+                });
+
+        return result;
+    }
+
+    /**
+     * Compute hash of each file in directory and return as map of hex strings.
+     * 
+     * @param directory path to directory
+     * @return map of relative path to 64-char hex hash
+     * @throws java.io.IOException if directory cannot be read
+     */
+    public static java.util.Map<String, String> hashDirectoryFilesHex(java.nio.file.Path directory)
+            throws java.io.IOException {
+        java.util.Map<String, byte[]> hashes = hashDirectoryFiles(directory);
+        java.util.Map<String, String> result = new java.util.TreeMap<>();
+        hashes.forEach((path, hash) -> result.put(path, HEX.formatHex(hash)));
+        return result;
+    }
+
     // ========================================================================
     // Verification utilities
     // ========================================================================

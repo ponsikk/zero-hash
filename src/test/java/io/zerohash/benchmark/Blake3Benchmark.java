@@ -7,7 +7,10 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +41,10 @@ public class Blake3Benchmark {
     private MessageDigest sha256;
     private byte[] expectedHash;
 
+    // File-based benchmark state
+    private Path tempFile;
+    private Path tempDir;
+
     @Setup(Level.Trial)
     public void setup() throws Exception {
         data = new byte[dataSize];
@@ -49,6 +56,40 @@ public class Blake3Benchmark {
 
         sha256 = MessageDigest.getInstance("SHA-256");
         expectedHash = Blake3.hash(data);
+
+        // Create temporary file for file benchmarks
+        tempFile = Files.createTempFile("blake3-bench-", ".bin");
+        Files.write(tempFile, data);
+
+        // Create temporary directory with multiple files for directory benchmarks
+        tempDir = Files.createTempDirectory("blake3-bench-dir-");
+        // Create 10 files in the directory
+        for (int i = 0; i < 10; i++) {
+            Path file = tempDir.resolve("file-" + i + ".bin");
+            byte[] fileData = new byte[dataSize / 10];
+            new Random(42 + i).nextBytes(fileData);
+            Files.write(file, fileData);
+        }
+    }
+
+    @TearDown(Level.Trial)
+    public void teardown() throws IOException {
+        // Clean up temporary files
+        if (tempFile != null && Files.exists(tempFile)) {
+            Files.delete(tempFile);
+        }
+
+        if (tempDir != null && Files.exists(tempDir)) {
+            Files.walk(tempDir)
+                .sorted((a, b) -> b.compareTo(a)) // Delete files before directories
+                .forEach(path -> {
+                    try {
+                        Files.delete(path);
+                    } catch (IOException e) {
+                        // Ignore
+                    }
+                });
+        }
     }
 
     // ========================================================================
@@ -103,6 +144,39 @@ public class Blake3Benchmark {
     @Benchmark
     public boolean blake3_verify() {
         return Blake3.verify(data, expectedHash);
+    }
+
+    // ========================================================================
+    // File hashing benchmarks
+    // ========================================================================
+
+    @Benchmark
+    public byte[] blake3_hashFile() throws IOException {
+        return Blake3.hashFile(tempFile);
+    }
+
+    @Benchmark
+    public byte[] blake3_hashFileParallel() throws IOException {
+        return Blake3.hashFileParallel(tempFile);
+    }
+
+    @Benchmark
+    public byte[] blake3_hashFileMmap() throws IOException {
+        return Blake3.hashFileMmap(tempFile);
+    }
+
+    @Benchmark
+    public byte[] blake3_hashFileMmapParallel() throws IOException {
+        return Blake3.hashFileMmapParallel(tempFile);
+    }
+
+    // ========================================================================
+    // Directory hashing benchmark
+    // ========================================================================
+
+    @Benchmark
+    public byte[] blake3_hashDirectory() throws IOException {
+        return Blake3.hashDirectory(tempDir);
     }
 
     // ========================================================================
