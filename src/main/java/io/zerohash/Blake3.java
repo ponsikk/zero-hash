@@ -75,15 +75,18 @@ public final class Blake3 {
         }
 
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment input = arena.allocate(Math.max(data.length, 1));
+            MemorySegment input;
             if (data.length > 0) {
+                input = arena.allocate(data.length);
                 input.copyFrom(MemorySegment.ofArray(data));
+            } else {
+                input = MemorySegment.NULL;
             }
 
             MemorySegment output = arena.allocate(HASH_SIZE);
 
             int result = (int) NativeLib.BLAKE3_HASH.invokeExact(
-                    data.length > 0 ? input : MemorySegment.NULL,
+                    input,
                     (long) data.length,
                     output);
 
@@ -190,16 +193,19 @@ public final class Blake3 {
             MemorySegment keySegment = arena.allocate(KEY_SIZE);
             keySegment.copyFrom(MemorySegment.ofArray(key));
 
-            MemorySegment input = arena.allocate(Math.max(data.length, 1));
+            MemorySegment input;
             if (data.length > 0) {
+                input = arena.allocate(data.length);
                 input.copyFrom(MemorySegment.ofArray(data));
+            } else {
+                input = MemorySegment.NULL;
             }
 
             MemorySegment output = arena.allocate(HASH_SIZE);
 
             int result = (int) NativeLib.BLAKE3_HASH_KEYED.invokeExact(
                     keySegment,
-                    data.length > 0 ? input : MemorySegment.NULL,
+                    input,
                     (long) data.length,
                     output);
 
@@ -239,22 +245,28 @@ public final class Blake3 {
         byte[] contextBytes = context.getBytes(StandardCharsets.UTF_8);
 
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment ctxSegment = arena.allocate(Math.max(contextBytes.length, 1));
+            MemorySegment ctxSegment;
             if (contextBytes.length > 0) {
+                ctxSegment = arena.allocate(contextBytes.length);
                 ctxSegment.copyFrom(MemorySegment.ofArray(contextBytes));
+            } else {
+                ctxSegment = MemorySegment.NULL;
             }
 
-            MemorySegment matSegment = arena.allocate(Math.max(material.length, 1));
+            MemorySegment matSegment;
             if (material.length > 0) {
+                matSegment = arena.allocate(material.length);
                 matSegment.copyFrom(MemorySegment.ofArray(material));
+            } else {
+                matSegment = MemorySegment.NULL;
             }
 
             MemorySegment output = arena.allocate(outputLength);
 
             int result = (int) NativeLib.BLAKE3_DERIVE_KEY.invokeExact(
-                    contextBytes.length > 0 ? ctxSegment : MemorySegment.NULL,
+                    ctxSegment,
                     (long) contextBytes.length,
-                    material.length > 0 ? matSegment : MemorySegment.NULL,
+                    matSegment,
                     (long) material.length,
                     output,
                     (long) outputLength);
