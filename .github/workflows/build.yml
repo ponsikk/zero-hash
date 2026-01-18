@@ -52,7 +52,7 @@ jobs:
         LD_LIBRARY_PATH: ${{ github.workspace }}/rust-ffi/target/release
     
     - name: Build JMH Benchmarks JAR
-      run: mvn package -Pjmh -DskipTests -B
+      run: mvn clean package -Pjmh -DskipTests -B
     
     - name: Run JMH Benchmarks
       run: |
